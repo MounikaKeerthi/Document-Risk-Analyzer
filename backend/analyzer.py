@@ -52,6 +52,7 @@ Common risky contract clause patterns:
 - AI/data usage rights that allow model training without consent
 """
 
+
 def extract_json_from_ai_response(raw_text: str) -> dict:
     """
     Claude may return:
@@ -63,8 +64,7 @@ def extract_json_from_ai_response(raw_text: str) -> dict:
     """
     cleaned = raw_text.strip()
 
-    # Remove markdown code fences if present
-    cleaned = re.sub(r"^```json\s*", "", cleaned)
+    cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"^```\s*", "", cleaned)
     cleaned = re.sub(r"\s*```$", "", cleaned)
 
@@ -73,7 +73,6 @@ def extract_json_from_ai_response(raw_text: str) -> dict:
     except json.JSONDecodeError:
         pass
 
-    # Fallback: extract first JSON object between { and }
     start = cleaned.find("{")
     end = cleaned.rfind("}")
 
@@ -83,19 +82,32 @@ def extract_json_from_ai_response(raw_text: str) -> dict:
 
     raise ValueError("Could not parse AI response as JSON.")
 
+
+def safe_list(value):
+    if isinstance(value, list):
+        return value
+
+    return []
+
+
 def normalize_analysis(parsed: dict) -> dict:
     risk_level = parsed.get("risk_level", "Medium")
 
     if risk_level not in ["High", "Medium", "Low"]:
         risk_level = "Medium"
 
+    risky_clauses = safe_list(parsed.get("risky_clauses", []))[:5]
+    privacy_concerns = safe_list(parsed.get("privacy_concerns", []))[:5]
+    suggested_questions = safe_list(parsed.get("suggested_questions", []))[:5]
+
     return {
         "risk_level": risk_level,
         "summary": parsed.get("summary", "No summary generated."),
-        "risky_clauses": json.dumps(parsed.get("risky_clauses", [])),
-        "privacy_concerns": json.dumps(parsed.get("privacy_concerns", [])),
-        "suggested_questions": json.dumps(parsed.get("suggested_questions", [])),
+        "risky_clauses": json.dumps(risky_clauses),
+        "privacy_concerns": json.dumps(privacy_concerns),
+        "suggested_questions": json.dumps(suggested_questions),
     }
+
 
 def analyze_document(content: str):
     if not os.getenv("ANTHROPIC_API_KEY"):
@@ -114,18 +126,18 @@ Do not include explanations before or after the JSON.
 Required JSON format:
 {{
   "risk_level": "High | Medium | Low",
-  "summary": "Plain-English summary of the document.",
+  "summary": "Plain-English summary of the document in 3 to 5 sentences.",
   "risky_clauses": [
     {{
       "clause": "Name of risky clause",
-      "reason": "Why this clause may require review.",
+      "reason": "Why this clause may require review. Maximum 2 sentences.",
       "severity": "High | Medium | Low"
     }}
   ],
   "privacy_concerns": [
     {{
       "issue": "Privacy concern name",
-      "reason": "Why this may be a privacy concern.",
+      "reason": "Why this may be a privacy concern. Maximum 2 sentences.",
       "related_area": "GDPR-style | CCPA-style | HIPAA-style | General privacy"
     }}
   ],
@@ -135,6 +147,17 @@ Required JSON format:
 }}
 
 Rules:
+- Return ONLY valid raw JSON.
+- Do not wrap the response in markdown.
+- Do not use ```json.
+- Do not include explanations before or after the JSON.
+- Return at most 5 risky clauses.
+- Return at most 5 privacy concerns.
+- Return at most 5 suggested questions.
+- Keep the summary under 5 sentences.
+- Keep each risky clause reason under 2 sentences.
+- Keep each privacy concern reason under 2 sentences.
+- Keep each suggested question under 25 words.
 - Do not say the document violates GDPR, CCPA, or HIPAA.
 - Say it may raise GDPR-style, CCPA-style, HIPAA-style, or privacy review questions.
 - If something is unclear, flag it as unclear instead of making assumptions.
@@ -144,14 +167,14 @@ Rules:
 
 Document:
 \"\"\"
-{content[:18000]}
+{content[:14000]}
 \"\"\"
 """
 
     response = client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=1800,
-        temperature=0.1,
+        max_tokens=4000,
+        temperature=0,
         messages=[
             {
                 "role": "user",

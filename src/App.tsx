@@ -1,24 +1,12 @@
 import { useEffect, useState } from "react";
 import "./App.css";
 
-type View = "dashboard" | "add" | "detail";
+import Sidebar from "./components/Sidebar";
+import Dashboard from "./components/Dashboard";
+import DocumentDetail from "./components/DocumentDetail";
+import DocumentForm from "./components/DocumentForm";
 
-type SortOption = "newest" | "oldest" | "title-asc" | "risk-high";
-
-type DocumentItem = {
-  id: number;
-  title: string;
-  document_type: string;
-  client_name: string | null;
-  content: string;
-  risk_level: string;
-  summary: string | null;
-  risky_clauses: string | null;
-  privacy_concerns: string | null;
-  suggested_questions: string | null;
-  created_at: string;
-  updated_at: string;
-};
+import type { DocumentItem, SortOption, View } from "./types/document";
 
 const API_BASE_URL = "http://127.0.0.1:8000";
 
@@ -88,15 +76,20 @@ function App() {
     setView("add");
   };
 
-  const openDocumentDetail = async (doc: DocumentItem) => {
-    const response = await fetch(`${API_BASE_URL}/documents/${doc.id}`);
-    const fullDocument = await response.json();
+const openDocumentDetail = async (doc: DocumentItem) => {
+  const response = await fetch(`${API_BASE_URL}/documents/${doc.id}`);
+  const fullDocument = await response.json();
 
-    setSelectedDocument(fullDocument);
-    setShowAnalysis(false);
-    setOpenMenuId(null);
-    setView("detail");
-  };
+  setSelectedDocument(fullDocument);
+
+  const hasAnalysis =
+    fullDocument.risk_level !== "Not analyzed" &&
+    Boolean(fullDocument.summary);
+
+  setShowAnalysis(hasAnalysis);
+  setOpenMenuId(null);
+  setView("detail");
+};
 
   const startEdit = (doc: DocumentItem) => {
     setEditingId(doc.id);
@@ -293,469 +286,70 @@ function App() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="logo">P</div>
-          <div>
-            <h1>PrivyDoc AI</h1>
-            <p>Privacy-first legal analyzer</p>
-          </div>
-        </div>
-
-        <nav>
-          <button
-            className={view === "dashboard" ? "nav-active" : ""}
-            onClick={() => setView("dashboard")}
-          >
-            Dashboard
-          </button>
-
-          <button
-            className={view === "add" ? "nav-active" : ""}
-            onClick={openAddPage}
-          >
-            Add Document
-          </button>
-        </nav>
-
-        <div className="privacy-card">
-          <h3>Privacy First</h3>
-          <p>
-            Your documents are stored locally in SQLite. Analysis runs only when
-            you click Analyze.
-          </p>
-        </div>
-      </aside>
+      <Sidebar
+        view={view}
+        onDashboardClick={() => setView("dashboard")}
+        onAddDocumentClick={openAddPage}
+      />
 
       <main className="main">
         {view === "dashboard" && (
-          <>
-            <div className="page-header">
-              <h1>Dashboard</h1>
-              <button onClick={openAddPage}>+ Add Document</button>
-            </div>
-
-            <section className="panel">
-              <div className="control-bar">
-                <input
-                  placeholder="Search documents by title or content..."
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                />
-
-                <select
-                  value={typeFilter}
-                  onChange={(event) => setTypeFilter(event.target.value)}
-                >
-                  <option value="">All Types</option>
-                  <option>NDA</option>
-                  <option>Contract</option>
-                  <option>Terms of Service</option>
-                  <option>Privacy Policy</option>
-                  <option>Employment Agreement</option>
-                  <option>Vendor Agreement</option>
-                  <option>Other</option>
-                </select>
-
-                <select
-                  value={riskFilter}
-                  onChange={(event) => setRiskFilter(event.target.value)}
-                >
-                  <option value="">All Risks</option>
-                  <option>High</option>
-                  <option>Medium</option>
-                  <option>Low</option>
-                  <option>Not analyzed</option>
-                </select>
-
-                <select
-                  value={sortOption}
-                  onChange={(event) =>
-                    setSortOption(event.target.value as SortOption)
-                  }
-                >
-                  <option value="newest">Sort: Newest First</option>
-                  <option value="oldest">Sort: Oldest First</option>
-                  <option value="title-asc">Sort: Title A-Z</option>
-                  <option value="risk-high">Sort: Highest Risk First</option>
-                </select>
-              </div>
-
-              <div className="document-table">
-                <div className="document-table-header">
-                  <span>Document</span>
-                  <span>Type</span>
-                  <span>Risk</span>
-                  <span>Created</span>
-                  <span></span>
-                </div>
-
-                {sortedDocuments.length === 0 ? (
-                  <p className="empty">No documents found.</p>
-                ) : (
-                  sortedDocuments.map((doc) => (
-                    <div
-                      key={doc.id}
-                      className="document-table-row"
-                      onClick={() => openDocumentDetail(doc)}
-                    >
-                      <div className="document-cell">
-                        <div className={getDocIconClass(doc.document_type)}>
-                          {doc.document_type.slice(0, 3).toUpperCase()}
-                        </div>
-
-                        <div className="document-info">
-                          <h3>{doc.title}</h3>
-                          <p>{doc.content.slice(0, 125)}...</p>
-                        </div>
-                      </div>
-
-                      <span className="type-cell">{doc.document_type}</span>
-
-                      <span className={getRiskClass(doc.risk_level)}>
-                        {doc.risk_level}
-                      </span>
-
-                      <span className="date-cell">
-                        {new Date(doc.created_at).toLocaleDateString()}
-                      </span>
-
-                      <div className="table-actions">
-                        <div className="action-menu">
-                          <button
-                            className="action-trigger"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setOpenMenuId(
-                                openMenuId === doc.id ? null : doc.id,
-                              );
-                            }}
-                          >
-                            ⋮
-                          </button>
-
-                          {openMenuId === doc.id && (
-                            <div className="action-dropdown">
-                              <button
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setOpenMenuId(null);
-                                  openDocumentDetail(doc);
-                                }}
-                              >
-                                Open
-                              </button>
-
-                              <button
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setOpenMenuId(null);
-                                  startEdit(doc);
-                                }}
-                              >
-                                Edit
-                              </button>
-
-                              <button
-                                className="delete-action"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setOpenMenuId(null);
-                                  deleteDocument(doc.id);
-                                }}
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </section>
-          </>
+          <Dashboard
+            search={search}
+            riskFilter={riskFilter}
+            typeFilter={typeFilter}
+            sortOption={sortOption}
+            sortedDocuments={sortedDocuments}
+            openMenuId={openMenuId}
+            setSearch={setSearch}
+            setRiskFilter={setRiskFilter}
+            setTypeFilter={setTypeFilter}
+            setSortOption={setSortOption}
+            openAddPage={openAddPage}
+            openDocumentDetail={openDocumentDetail}
+            startEdit={startEdit}
+            deleteDocument={deleteDocument}
+            setOpenMenuId={setOpenMenuId}
+            getRiskClass={getRiskClass}
+            getDocIconClass={getDocIconClass}
+          />
         )}
 
         {view === "detail" && selectedDocument && (
-          <>
-            <div className="page-header">
-              <h1>{selectedDocument.title}</h1>
-
-              <div className="button-row no-margin">
-                <button
-                  className="secondary"
-                  onClick={() => setView("dashboard")}
-                >
-                  Back
-                </button>
-
-                <button
-                  className="secondary"
-                  onClick={() => startEdit(selectedDocument)}
-                >
-                  Edit
-                </button>
-
-                <button
-                  className="danger-button"
-                  onClick={() => deleteDocument(selectedDocument.id)}
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-
-            <section className="detail-page-layout">
-              <div className="panel">
-                <div className="document-meta-grid">
-                  <div>
-                    <p className="meta-label">Document Type</p>
-                    <h3>{selectedDocument.document_type}</h3>
-                  </div>
-
-                  <div>
-                    <p className="meta-label">Client / Matter</p>
-                    <h3>{selectedDocument.client_name || "Not provided"}</h3>
-                  </div>
-
-                  <div>
-                    <p className="meta-label">Current Risk</p>
-                    <span className={getRiskClass(selectedDocument.risk_level)}>
-                      {selectedDocument.risk_level}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="panel">
-                <h2>Original Document Text</h2>
-                <pre className="full-document-text">
-                  {selectedDocument.content}
-                </pre>
-              </div>
-
-              {!showAnalysis && (
-                <div className="panel analyze-placeholder">
-                  <h2>AI Analysis Not Started</h2>
-                  <p>
-                    {isAnalyzing
-                      ? "Analyzing document with Claude. This may take a few seconds."
-                      : "Click Analyze to generate the plain-English summary, risky clauses, privacy concerns, and suggested review questions."}
-                  </p>
-                  <button
-                    onClick={() => analyzeDocument(selectedDocument.id)}
-                    disabled={isAnalyzing}
-                  >
-                    {isAnalyzing ? "Analyzing..." : "Analyze Document"}
-                  </button>
-                </div>
-              )}
-
-              {showAnalysis && (
-                <div className="analysis-grid">
-                  <div className="panel analysis-card-large">
-                    <div className="detail-title-row">
-                      <h2>Plain-English Summary</h2>
-                      <span
-                        className={getRiskClass(selectedDocument.risk_level)}
-                      >
-                        {selectedDocument.risk_level}
-                      </span>
-                    </div>
-
-                    <p className="summary-text">
-                      {selectedDocument.summary || "No summary generated."}
-                    </p>
-                  </div>
-
-                  <div className="panel">
-                    <h2>Risky Clauses</h2>
-
-                    {riskyClauses.length === 0 ? (
-                      <p className="empty">No risky clauses detected.</p>
-                    ) : (
-                      riskyClauses.map((item: any, index: number) => (
-                        <div className="finding" key={index}>
-                          <div>
-                            <strong>{item.clause}</strong>
-                            <p>{item.reason}</p>
-                          </div>
-
-                          <span className={getRiskClass(item.severity)}>
-                            {item.severity}
-                          </span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  <div className="panel">
-                    <h2>Privacy Concerns</h2>
-
-                    {privacyConcerns.length === 0 ? (
-                      <p className="empty">No privacy concerns detected.</p>
-                    ) : (
-                      privacyConcerns.map((item: any, index: number) => (
-                        <div className="finding" key={index}>
-                          <strong>{item.issue}</strong>
-                          <p>{item.reason}</p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  <div className="panel">
-                    <h2>Suggested Questions</h2>
-
-                    {suggestedQuestions.length === 0 ? (
-                      <p className="empty">No suggested questions generated.</p>
-                    ) : (
-                      <ul className="question-list">
-                        {suggestedQuestions.map(
-                          (question: string, index: number) => (
-                            <li key={index}>{question}</li>
-                          ),
-                        )}
-                      </ul>
-                    )}
-                  </div>
-                </div>
-              )}
-            </section>
-          </>
+          <DocumentDetail
+            selectedDocument={selectedDocument}
+            showAnalysis={showAnalysis}
+            isAnalyzing={isAnalyzing}
+            riskyClauses={riskyClauses}
+            privacyConcerns={privacyConcerns}
+            suggestedQuestions={suggestedQuestions}
+            getRiskClass={getRiskClass}
+            setViewDashboard={() => setView("dashboard")}
+            startEdit={startEdit}
+            deleteDocument={deleteDocument}
+            analyzeDocument={analyzeDocument}
+          />
         )}
 
         {view === "add" && (
-          <>
-            <div className="page-header">
-              <h1>{editingId ? "Update Document" : "Add Document"}</h1>
-
-              <button
-                className="secondary"
-                onClick={() => setView("dashboard")}
-              >
-                Back to Dashboard
-              </button>
-            </div>
-
-            <section className="form-page panel">
-              <div className="form-two-column">
-                <div className="form-left">
-                  <label>Document Title</label>
-                  <input
-                    placeholder="Example: Vendor NDA Review"
-                    value={title}
-                    onChange={(event) => setTitle(event.target.value)}
-                  />
-
-                  <label>Client / Matter Name</label>
-                  <input
-                    placeholder="Example: Acme Corp"
-                    value={clientName}
-                    onChange={(event) => setClientName(event.target.value)}
-                  />
-
-                  <label>Document Type</label>
-                  <select
-                    value={documentType}
-                    onChange={(event) => setDocumentType(event.target.value)}
-                  >
-                    <option>NDA</option>
-                    <option>Contract</option>
-                    <option>Terms of Service</option>
-                    <option>Privacy Policy</option>
-                    <option>Employment Agreement</option>
-                    <option>Vendor Agreement</option>
-                    <option>Other</option>
-                  </select>
-
-                  <div className="button-row">
-                    <button onClick={saveDocument}>
-                      {editingId ? "Save Changes" : "Create Document"}
-                    </button>
-
-                    <button className="secondary" onClick={resetForm}>
-                      Clear
-                    </button>
-                  </div>
-                </div>
-
-                <div className="form-right">
-                  <label>Input Method</label>
-
-                  <div className="input-toggle">
-                    <button
-                      type="button"
-                      className={
-                        inputMode === "paste" ? "toggle-active" : "secondary"
-                      }
-                      onClick={() => setInputMode("paste")}
-                    >
-                      Paste Text
-                    </button>
-
-                    <button
-                      type="button"
-                      className={
-                        inputMode === "upload" ? "toggle-active" : "secondary"
-                      }
-                      onClick={() => setInputMode("upload")}
-                      disabled={editingId !== null}
-                    >
-                      Upload File
-                    </button>
-                  </div>
-
-                  {editingId && (
-                    <p className="helper-text">
-                      Upload is disabled while editing. Edit extracted text
-                      directly instead.
-                    </p>
-                  )}
-
-                  {inputMode === "paste" && (
-                    <>
-                      <label>Document Content</label>
-                      <textarea
-                        className="large-textarea"
-                        placeholder="Paste document text here..."
-                        value={content}
-                        onChange={(event) => setContent(event.target.value)}
-                      />
-                    </>
-                  )}
-
-                  {inputMode === "upload" && !editingId && (
-                    <div className="upload-box">
-                      <label>Upload Document</label>
-
-                      <input
-                        type="file"
-                        accept=".txt,.pdf,.docx"
-                        onChange={(event) => {
-                          const file = event.target.files?.[0] || null;
-                          setSelectedFile(file);
-                        }}
-                      />
-
-                      <p className="helper-text">
-                        Supported files: TXT, PDF, DOCX. Scanned PDFs are not
-                        supported yet.
-                      </p>
-
-                      {selectedFile && (
-                        <p className="selected-file">
-                          Selected file: <strong>{selectedFile.name}</strong>
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </section>
-          </>
+          <DocumentForm
+            editingId={editingId}
+            title={title}
+            documentType={documentType}
+            clientName={clientName}
+            content={content}
+            selectedFile={selectedFile}
+            inputMode={inputMode}
+            setViewDashboard={() => setView("dashboard")}
+            setTitle={setTitle}
+            setDocumentType={setDocumentType}
+            setClientName={setClientName}
+            setContent={setContent}
+            setSelectedFile={setSelectedFile}
+            setInputMode={setInputMode}
+            saveDocument={saveDocument}
+            resetForm={resetForm}
+          />
         )}
       </main>
     </div>
